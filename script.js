@@ -1,8 +1,6 @@
 // Global state
 let currentUser = null;
 let requests = [];
-let messages = [];
-let publicMessages = [];
 
 // DOM elements
 const requestsBtn = document.getElementById('requestsBtn');
@@ -29,12 +27,34 @@ const platformGroup = document.getElementById('platformGroup');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    loadStoredData();
     checkForAdmin();
     setupEventListeners();
     requestNotificationPermission();
     initializeDarkMode();
+    loadData();
 });
+
+// API helper
+async function api(method, path, body) {
+    const options = { method, headers: {} };
+    if (body) {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify(body);
+    }
+    const res = await fetch(path, options);
+    if (res.status === 204) return null;
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+}
+
+// Load initial data
+async function loadData() {
+    try {
+        requests = await api('GET', '/api/requests');
+    } catch (e) {
+        console.error('Failed to load requests', e);
+    }
+}
 
 // Initialize dark mode
 function initializeDarkMode() {
@@ -45,36 +65,15 @@ function initializeDarkMode() {
     }
 }
 
-// Load stored data from localStorage
-function loadStoredData() {
-    const storedRequests = localStorage.getItem('dogracy_requests');
-    const storedMessages = localStorage.getItem('dogracy_messages');
-    const storedPublicMessages = localStorage.getItem('dogracy_public_messages');
-    
-    if (storedRequests) requests = JSON.parse(storedRequests);
-    if (storedMessages) messages = JSON.parse(storedMessages);
-    if (storedPublicMessages) publicMessages = JSON.parse(storedPublicMessages);
-}
-
-// Save data to localStorage
-function saveData() {
-    localStorage.setItem('dogracy_requests', JSON.stringify(requests));
-    localStorage.setItem('dogracy_messages', JSON.stringify(messages));
-    localStorage.setItem('dogracy_public_messages', JSON.stringify(publicMessages));
-}
-
 // Check if user is admin
 function checkForAdmin() {
     const loginData = localStorage.getItem('dogracy_admin_login');
     if (loginData) {
         const parsed = JSON.parse(loginData);
-        // Check if login is still valid (7 days)
         const sevenDays = 7 * 24 * 60 * 60 * 1000;
         if (Date.now() - parsed.timestamp < sevenDays) {
             currentUser = { username: parsed.username, isAdmin: true };
-            adminBtn.style.display = 'block';
         } else {
-            // Clear expired login
             localStorage.removeItem('dogracy_admin_login');
         }
     }
@@ -93,22 +92,16 @@ function setupEventListeners() {
     requestForm.addEventListener('submit', handleRequestSubmit);
     adminLoginForm.addEventListener('submit', handleAdminLogin);
     requestType.addEventListener('change', handleRequestTypeChange);
-    
-    // Tab event listeners
+
     document.getElementById('newRequestTab').addEventListener('click', () => switchTab('newRequest'));
     document.getElementById('pendingTab').addEventListener('click', () => switchTab('pending'));
-    
-    // Close popup when clicking outside
+
     requestPopup.addEventListener('click', (e) => {
-        if (e.target === requestPopup) {
-            closeRequestPopup();
-        }
+        if (e.target === requestPopup) closeRequestPopup();
     });
-    
+
     adminLoginPopup.addEventListener('click', (e) => {
-        if (e.target === adminLoginPopup) {
-            closeAdminLoginPopup();
-        }
+        if (e.target === adminLoginPopup) closeAdminLoginPopup();
     });
 }
 
@@ -135,10 +128,10 @@ function closeAdminLoginPopup() {
 function switchTab(tab) {
     const tabs = document.querySelectorAll('.tab-btn');
     const contents = document.querySelectorAll('.tab-content');
-    
+
     tabs.forEach(t => t.classList.remove('active'));
     contents.forEach(c => c.classList.remove('active'));
-    
+
     if (tab === 'newRequest') {
         document.getElementById('newRequestTab').classList.add('active');
         document.getElementById('newRequestContent').classList.add('active');
@@ -152,21 +145,18 @@ function switchTab(tab) {
 // Handle admin login
 function handleAdminLogin(e) {
     e.preventDefault();
-    
+
     const formData = new FormData(adminLoginForm);
     const username = formData.get('adminUsername');
     const password = formData.get('adminPassword');
-    
+
     if (username === 'Dogday17' && password === 'Doggy Dogday17') {
         currentUser = { username: 'Dogday17', isAdmin: true };
-        // Set persistent login with expiration
-        const loginData = {
-            username: username,
-            password: password,
+        localStorage.setItem('dogracy_admin_login', JSON.stringify({
+            username,
             timestamp: Date.now()
-        };
-        localStorage.setItem('dogracy_admin_login', JSON.stringify(loginData));
-        
+        }));
+
         closeAdminLoginPopup();
         showNotification('Login successful!');
         openAdminPanel();
@@ -187,7 +177,7 @@ function handleRequestTypeChange() {
     }
 }
 
-// Open request popup with animation
+// Open request popup
 function openRequestPopup() {
     requestPopup.classList.add('active');
 }
@@ -199,101 +189,98 @@ function closeRequestPopup() {
 }
 
 // Render pending requests for users
-function renderPendingRequests() {
+async function renderPendingRequests() {
     const container = document.getElementById('pendingRequests');
-    const userName = localStorage.getItem('dogracy_user_name') || 'Guest';
-    
-    // Filter requests for this user
-    const userRequests = requests.filter(r => r.name === userName);
-    
-    if (userRequests.length === 0) {
-        container.innerHTML = '<p class="no-pending">No pending requests</p>';
-        return;
+    const userName = localStorage.getItem('dogracy_user_name') || '';
+
+    container.innerHTML = '<p class="no-pending">Loading...</p>';
+
+    try {
+        const allRequests = await api('GET', '/api/requests');
+        const userRequests = userName ? allRequests.filter(r => r.name === userName) : [];
+
+        if (userRequests.length === 0) {
+            container.innerHTML = '<p class="no-pending">No pending requests</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+
+        for (const request of userRequests) {
+            const msgs = await api('GET', `/api/messages?requestId=${request.id}`);
+            const adminMessages = msgs.filter(m => m.sender === 'Dogday17');
+
+            const requestElement = document.createElement('div');
+            requestElement.className = 'pending-request-item';
+            requestElement.innerHTML = `
+                <h4>${request.type === 'game' ? request.gameName : request.platform + ' Account'}</h4>
+                <p>${request.description}</p>
+                <span class="status ${request.status}">${request.status}</span>
+                ${adminMessages.length > 0 ? `
+                    <div class="admin-message">
+                        <strong>Admin Response:</strong><br>
+                        ${adminMessages[adminMessages.length - 1].text}
+                    </div>
+                ` : ''}
+                <small>${new Date(request.createdAt).toLocaleString()}</small>
+            `;
+
+            container.appendChild(requestElement);
+        }
+    } catch (e) {
+        container.innerHTML = '<p class="no-pending">Failed to load requests</p>';
     }
-    
-    container.innerHTML = '';
-    
-    userRequests.forEach(request => {
-        const requestElement = document.createElement('div');
-        requestElement.className = 'pending-request-item';
-        
-        // Get admin messages for this request
-        const adminMessages = messages.filter(m => m.requestId === request.id && m.sender === 'Dogday17');
-        
-        requestElement.innerHTML = `
-            <h4>${request.type === 'game' ? request.gameName : request.platform + ' Account'}</h4>
-            <p>${request.description}</p>
-            <span class="status ${request.status}">${request.status}</span>
-            ${adminMessages.length > 0 ? `
-                <div class="admin-message">
-                    <strong>Admin Response:</strong><br>
-                    ${adminMessages[adminMessages.length - 1].text}
-                </div>
-            ` : ''}
-            <small>${new Date(request.timestamp).toLocaleString()}</small>
-        `;
-        
-        container.appendChild(requestElement);
-    });
 }
 
 // Handle request form submission
-function handleRequestSubmit(e) {
+async function handleRequestSubmit(e) {
     e.preventDefault();
-    
+
     const formData = new FormData(requestForm);
     const userName = formData.get('userName');
-    
-    // Save user name for future requests
+
     localStorage.setItem('dogracy_user_name', userName);
-    
-    const request = {
-        id: Date.now(),
-        name: userName,
-        type: formData.get('requestType'),
-        gameName: formData.get('gameName'),
-        platform: formData.get('platform'),
-        description: formData.get('description'),
-        timestamp: new Date().toISOString(),
-        status: 'pending'
-    };
-    
-    requests.push(request);
-    saveData();
-    
-    showNotification('Request submitted successfully!');
-    closeRequestPopup();
-    
-    // Notify admin if online
-    if (currentUser && currentUser.isAdmin) {
-        showNotification('New request received!');
-        renderRequests();
+
+    try {
+        await api('POST', '/api/requests', {
+            name: userName,
+            type: formData.get('requestType'),
+            gameName: formData.get('gameName'),
+            platform: formData.get('platform'),
+            description: formData.get('description') || '',
+        });
+
+        requests = await api('GET', '/api/requests');
+        showNotification('Request submitted successfully!');
+        closeRequestPopup();
+
+        if (currentUser?.isAdmin) {
+            renderRequests();
+        }
+    } catch (e) {
+        showNotification('Failed to submit request', 'error');
     }
 }
 
 // Open admin panel
-function openAdminPanel() {
+async function openAdminPanel() {
     adminPanel.style.display = 'flex';
-    setTimeout(() => {
-        adminPanel.classList.add('active');
-    }, 10);
+    setTimeout(() => adminPanel.classList.add('active'), 10);
+    requests = await api('GET', '/api/requests');
     renderRequests();
-    renderAdminMessages();
 }
 
 // Close admin panel
 function closeAdminPanel() {
     adminPanel.classList.remove('active');
-    setTimeout(() => {
-        adminPanel.style.display = 'none';
-    }, 300);
+    setTimeout(() => adminPanel.style.display = 'none', 300);
 }
 
 // Render requests in admin panel
 function renderRequests() {
     const container = document.getElementById('requestsContainer');
     container.innerHTML = '';
-    
+
     requests.forEach(request => {
         const requestElement = document.createElement('div');
         requestElement.className = 'request-item';
@@ -301,56 +288,51 @@ function renderRequests() {
             <button class="delete-request-btn" data-request-id="${request.id}">×</button>
             <h4>${request.name} - ${request.type === 'game' ? request.gameName : request.platform + ' Account'}</h4>
             <p>${request.description}</p>
-            <small>${new Date(request.timestamp).toLocaleString()}</small>
+            <small>${new Date(request.createdAt).toLocaleString()}</small>
         `;
-        
-        // Add click listener for selecting request
+
         requestElement.addEventListener('click', (e) => {
-            // Don't select if clicking delete button
             if (!e.target.classList.contains('delete-request-btn')) {
                 selectRequest(request);
             }
         });
-        
-        // Add click listener for delete button
+
         const deleteBtn = requestElement.querySelector('.delete-request-btn');
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             deleteRequest(request.id);
         });
-        
+
         container.appendChild(requestElement);
     });
 }
 
 // Delete request
-function deleteRequest(requestId) {
+async function deleteRequest(requestId) {
     if (confirm('Are you sure you want to delete this request?')) {
-        // Remove request from array
-        requests = requests.filter(r => r.id !== requestId);
-        // Remove related messages
-        messages = messages.filter(m => m.requestId !== requestId);
-        
-        saveData();
-        renderRequests();
-        
-        // Clear chat if this request was selected
-        const adminChatInput = document.getElementById('adminChatInput');
-        if (adminChatInput.dataset.requestId == requestId) {
-            adminChatInput.dataset.requestId = '';
-            document.getElementById('adminChatMessages').innerHTML = '';
+        try {
+            await api('DELETE', `/api/requests/${requestId}`);
+            requests = await api('GET', '/api/requests');
+            renderRequests();
+
+            const adminChatInput = document.getElementById('adminChatInput');
+            if (adminChatInput.dataset.requestId == requestId) {
+                adminChatInput.dataset.requestId = '';
+                document.getElementById('adminChatMessages').innerHTML = '';
+            }
+
+            showNotification('Request deleted successfully!');
+        } catch (e) {
+            showNotification('Failed to delete request', 'error');
         }
-        
-        showNotification('Request deleted successfully!');
     }
 }
 
 // Select a request to respond to
-function selectRequest(request) {
+async function selectRequest(request) {
     const messageInput = document.getElementById('adminChatInput');
     messageInput.dataset.requestId = request.id;
-    
-    // Show request details in chat
+
     const chatMessages = document.getElementById('adminChatMessages');
     chatMessages.innerHTML = `
         <div class="message received">
@@ -362,39 +344,38 @@ function selectRequest(request) {
             </div>
         </div>
     `;
-    
-    // Load existing messages
-    const requestMessages = messages.filter(m => m.requestId === request.id);
-    requestMessages.forEach(msg => {
-        addMessageToChat(msg, 'adminChatMessages');
-    });
+
+    try {
+        const msgs = await api('GET', `/api/messages?requestId=${request.id}`);
+        msgs.forEach(msg => addMessageToChat(msg, 'adminChatMessages'));
+    } catch (e) {
+        console.error('Failed to load messages', e);
+    }
 }
 
 // Open chat panel
-function openChatPanel() {
+async function openChatPanel() {
     chatPanel.style.display = 'flex';
-    setTimeout(() => {
-        chatPanel.classList.add('active');
-    }, 10);
-    renderPublicMessages();
+    setTimeout(() => chatPanel.classList.add('active'), 10);
+    await renderPublicMessages();
 }
 
 // Close chat panel
 function closeChatPanel() {
     chatPanel.classList.remove('active');
-    setTimeout(() => {
-        chatPanel.style.display = 'none';
-    }, 300);
+    setTimeout(() => chatPanel.style.display = 'none', 300);
 }
 
 // Render public messages
-function renderPublicMessages() {
+async function renderPublicMessages() {
     const container = document.getElementById('publicChatMessages');
-    container.innerHTML = '';
-    
-    publicMessages.forEach(msg => {
-        addMessageToChat(msg, 'publicChatMessages');
-    });
+    try {
+        const msgs = await api('GET', '/api/chat');
+        container.innerHTML = '';
+        msgs.forEach(msg => addMessageToChat(msg, 'publicChatMessages'));
+    } catch (e) {
+        console.error('Failed to load chat', e);
+    }
 }
 
 // Add message to chat
@@ -414,102 +395,76 @@ function addMessageToChat(message, containerId) {
 document.addEventListener('DOMContentLoaded', () => {
     const adminSendBtn = document.getElementById('adminSendBtn');
     const adminChatInput = document.getElementById('adminChatInput');
-    
+
     if (adminSendBtn && adminChatInput) {
         adminSendBtn.addEventListener('click', sendAdminMessage);
         adminChatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendAdminMessage();
-            }
+            if (e.key === 'Enter') sendAdminMessage();
         });
     }
 });
 
 // Send admin message
-function sendAdminMessage() {
+async function sendAdminMessage() {
     const input = document.getElementById('adminChatInput');
     const requestId = input.dataset.requestId;
     const text = input.value.trim();
-    
+
     if (!text || !requestId) return;
-    
-    const message = {
-        id: Date.now(),
-        requestId: parseInt(requestId),
-        sender: 'Dogday17',
-        text: text,
-        timestamp: new Date().toISOString(),
-        type: 'admin'
-    };
-    
-    messages.push(message);
-    saveData();
-    
-    addMessageToChat(message, 'adminChatMessages');
-    input.value = '';
-    
-    showNotification('Message sent!');
-    
-    // Update request status to completed when admin responds
-    const request = requests.find(r => r.id === parseInt(requestId));
-    if (request) {
-        request.status = 'completed';
-        saveData();
-        renderRequests(); // Refresh admin panel
-    }
-    
-    // Show browser notification to user
-    if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('New message from Dogday17', {
-            body: text,
-            icon: '🎮'
+
+    try {
+        const message = await api('POST', '/api/messages', {
+            requestId: parseInt(requestId),
+            sender: 'Dogday17',
+            text,
         });
+
+        addMessageToChat(message, 'adminChatMessages');
+        input.value = '';
+
+        await api('PATCH', `/api/requests/${requestId}`, { status: 'completed' });
+        requests = await api('GET', '/api/requests');
+        renderRequests();
+
+        showNotification('Message sent!');
+
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('New message from Dogday17', { body: text, icon: '🎮' });
+        }
+    } catch (e) {
+        showNotification('Failed to send message', 'error');
     }
-    
-    // Also show in-app notification
-    showNotification('User received your message!');
 }
 
 // Setup public chat
 document.addEventListener('DOMContentLoaded', () => {
     const publicSendBtn = document.getElementById('publicSendBtn');
     const publicChatInput = document.getElementById('publicChatInput');
-    
+
     if (publicSendBtn && publicChatInput) {
         publicSendBtn.addEventListener('click', sendPublicMessage);
         publicChatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendPublicMessage();
-            }
+            if (e.key === 'Enter') sendPublicMessage();
         });
     }
 });
 
 // Send public message
-function sendPublicMessage() {
+async function sendPublicMessage() {
     const input = document.getElementById('publicChatInput');
     const text = input.value.trim();
-    
+
     if (!text) return;
-    
+
     const username = currentUser?.username || `User${Math.floor(Math.random() * 1000)}`;
-    
-    const message = {
-        id: Date.now(),
-        sender: username,
-        text: text,
-        timestamp: new Date().toISOString(),
-        type: 'public'
-    };
-    
-    publicMessages.push(message);
-    saveData();
-    
-    addMessageToChat(message, 'publicChatMessages');
-    input.value = '';
-    
-    // Notify others (in real app, this would be WebSocket)
-    showNotification(`${username} sent a message in public chat`);
+
+    try {
+        const message = await api('POST', '/api/chat', { sender: username, text });
+        addMessageToChat(message, 'publicChatMessages');
+        input.value = '';
+    } catch (e) {
+        showNotification('Failed to send message', 'error');
+    }
 }
 
 // Request notification permission
@@ -523,62 +478,12 @@ function requestNotificationPermission() {
 function showNotification(text, type = 'success') {
     notificationText.textContent = text;
     notification.style.display = 'block';
-    
+
     if (type === 'error') {
         notification.style.background = 'var(--danger-color)';
     } else {
         notification.style.background = 'var(--primary-color)';
     }
-    
-    setTimeout(() => {
-        notification.style.display = 'none';
-    }, 3000);
-}
 
-// File sharing functionality (simplified for demo)
-function shareFiles(requestId) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    
-    input.onchange = (e) => {
-        const files = Array.from(e.target.files);
-        
-        files.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const fileData = {
-                    name: file.name,
-                    size: file.size,
-                    type: file.type,
-                    data: e.target.result,
-                    requestId: requestId,
-                    timestamp: new Date().toISOString()
-                };
-                
-                // Store file data (in real app, upload to server)
-                const storedFiles = JSON.parse(localStorage.getItem('dogracy_files') || '[]');
-                storedFiles.push(fileData);
-                localStorage.setItem('dogracy_files', JSON.stringify(storedFiles));
-                
-                showNotification(`File ${file.name} shared successfully!`);
-            };
-            reader.readAsDataURL(file);
-        });
-    };
-    
-    input.click();
-}
-
-// Download file functionality
-function downloadFile(fileId) {
-    const storedFiles = JSON.parse(localStorage.getItem('dogracy_files') || '[]');
-    const file = storedFiles.find(f => f.id === fileId);
-    
-    if (file) {
-        const link = document.createElement('a');
-        link.href = file.data;
-        link.download = file.name;
-        link.click();
-    }
+    setTimeout(() => notification.style.display = 'none', 3000);
 }
