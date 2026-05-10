@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dogracy - Get Free Games & Accounts</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <div class="nav-brand">
+                <h1>Dogracy</h1>
+            </div>
+            <div class="nav-links">
+                <button class="nav-btn" id="requestsBtn">Requests</button>
+                <button class="nav-btn" id="chatBtn">Chat</button>
+                <button class="nav-btn" id="adminBtn">Admin</button>
+                <button class="nav-btn" id="darkModeToggle">Dark</button>
+            </div>
+        </nav>
+    </header>
+
+    <main class="main">
+        <section class="hero">
+            <div class="hero-content">
+                <h2>Welcome to Dogracy</h2>
+                <p>Get games and accounts for free</p>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="feature-card">
+                <h3>Request Games</h3>
+                <p>Get access to games you want to play for Free</p>
+            </div>
+            <div class="feature-card">
+                <h3>Get Accounts</h3>
+                <p>Have accounts that have games and subscriptions for Free</p>
+            </div>
+            <div class="feature-card">
+                <h3>Community Chat</h3>
+                <p>Connect with other gamers in the community</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Request Popup -->
+    <div class="popup-overlay" id="requestPopup">
+        <div class="popup-content">
+            <div class="popup-header">
+                <h3>Requests</h3>
+                <button class="close-btn" id="closePopup">&times;</button>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="popup-tabs">
+                <button class="tab-btn active" id="newRequestTab">New Request</button>
+                <button class="tab-btn" id="pendingTab">Pending</button>
+            </div>
+            
+            <!-- New Request Form -->
+            <div class="tab-content active" id="newRequestContent">
+                <form class="request-form" id="requestForm">
+                    <div class="form-group">
+                        <label for="userName">Name</label>
+                        <input type="text" id="userName" name="userName" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="requestType">Request Type</label>
+                        <select id="requestType" name="requestType" required>
+                            <option value="game">Game</option>
+                            <option value="account">Account</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="gameNameGroup">
+                        <label for="gameName">Game Name</label>
+                        <input type="text" id="gameName" name="gameName">
+                    </div>
+
+                    <div class="form-group" id="platformGroup" style="display: none;">
+                        <label for="platform">Account Platform</label>
+                        <select id="platform" name="platform">
+                            <option value="steam">Steam</option>
+                            <option value="xbox">Xbox</option>
+                            <option value="playstation">PlayStation</option>
+                            <option value="epic">Epic Games</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">Description</label>
+                        <textarea id="description" name="description" rows="4" placeholder="Tell us what you want and why you need it..."></textarea>
+                    </div>
+
+                    <button type="submit" class="submit-btn">Send Request</button>
+                </form>
+            </div>
+            
+            <!-- Pending Requests -->
+            <div class="tab-content" id="pendingContent">
+                <div class="pending-requests" id="pendingRequests">
+                    <p class="no-pending">No pending requests</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div class="admin-panel" id="adminPanel" style="display: none;">
+        <div class="admin-header">
+            <h2>Admin Panel - Dogday17</h2>
+            <button class="close-admin" id="closeAdmin">&times;</button>
+        </div>
+        <div class="admin-content">
+            <div class="requests-list" id="requestsList">
+                <h3>Pending Requests</h3>
+                <div id="requestsContainer"></div>
+            </div>
+            <div class="admin-chat">
+                <h3>Messages</h3>
+                <div class="chat-messages" id="adminChatMessages"></div>
+                <div class="chat-input">
+                    <input type="text" id="adminChatInput" placeholder="Type your message...">
+                    <button id="adminSendBtn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Public Chat -->
+    <div class="chat-panel" id="chatPanel" style="display: none;">
+        <div class="chat-header">
+            <h2>Community Chat</h2>
+            <button class="close-chat" id="closeChat">&times;</button>
+        </div>
+        <div class="chat-content">
+            <div class="public-chat-messages" id="publicChatMessages"></div>
+            <div class="chat-input">
+                <input type="text" id="publicChatInput" placeholder="Type your message...">
+                <button id="publicSendBtn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Login Popup -->
+    <div class="popup-overlay" id="adminLoginPopup">
+        <div class="popup">
+            <div class="popup-header">
+                <h3>Admin Login</h3>
+                <button class="close-btn" id="closeAdminLogin">&times;</button>
+            </div>
+            <form class="admin-login-form" id="adminLoginForm">
+                <div class="form-group">
+                    <label for="adminUsername">Username</label>
+                    <input type="text" id="adminUsername" name="adminUsername" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="adminPassword">Password</label>
+                    <input type="password" id="adminPassword" name="adminPassword" required>
+                </div>
+
+                <button type="submit" class="submit-btn">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div class="notification" id="notification" style="display: none;">
+        <span id="notificationText"></span>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
